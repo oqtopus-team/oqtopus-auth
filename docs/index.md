@@ -1,35 +1,35 @@
 <!-- markdownlint-disable MD041 -->
 ![OQTOPUS logo](./asset/oqtopus-logo.png)
 
-# python-project-template
+# oqtopus-auth
 
-!!! warning "Template Note"
-    This note is included for the project template.
-    Remove this note before publishing the documentation.
-
-    This page is provided as a sample for the project template.  
-    The badge and citation links currently point to those of Tranqu.
-
-[![CI](https://github.com/oqtopus-team/tranqu/actions/workflows/ci.yaml/badge.svg)](https://github.com/oqtopus-team/tranqu/actions/workflows/ci.yaml)
-[![codecov](https://codecov.io/gh/oqtopus-team/tranqu/graph/badge.svg?token=RCXTMMXOMV)](https://codecov.io/gh/oqtopus-team/tranqu)
-[![pypi version](https://img.shields.io/pypi/v/tranqu.svg)](https://pypi.org/project/tranqu/)
+[![CI](https://github.com/oqtopus-team/oqtopus-auth/actions/workflows/ci.yaml/badge.svg)](https://github.com/oqtopus-team/oqtopus-auth/actions/workflows/ci.yaml)
+[![codecov](https://codecov.io/gh/oqtopus-team/oqtopus-auth/graph/badge.svg?token=RCXTMMXOMV)](https://codecov.io/gh/oqtopus-team/oqtopus-auth)
+[![pypi version](https://img.shields.io/pypi/v/oqtopus-auth.svg)](https://pypi.org/project/oqtopus-auth/)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![slack](https://img.shields.io/badge/slack-OQTOPUS-pink.svg?logo=slack&style=plastic")](https://join.slack.com/t/oqtopus/shared_invite/zt-3bpjb7yc3-Vg8IYSMY1m5wV3DR~TMSnw)
 
 ## Overview
 
-**python-project-template** is a template repository for building Python projects in OQTOPUS ecosystem.
-
-It provides a project template that helps developers quickly start Python
-projects related to OQTOPUS while following the project's conventions.
+**OQTOPUS Auth** is a framework-agnostic authentication and authorization
+library for the OQTOPUS ecosystem. It ships pluggable authentication
+providers (disabled auth, and reverse-proxy-injected JWT headers) plus a
+role/permission model, with an optional FastAPI integration.
 
 ## Features
 
-- **Hello, World application**: A Hello World application is included as an example.
+- **Pluggable providers**: `none` (disabled auth) and `header` (JWT read
+  from a reverse-proxy-injected header, with optional JWKS signature
+  verification).
+- **Framework-agnostic core**: providers, configuration models, and
+  permission checks have no dependency on any web framework.
+- **Optional FastAPI integration**: middleware and `Depends`-based role and
+  permission checks, installed via the `fastapi` extra.
 
 ## Usage
 
 - [Getting Started](./usage/getting_started.md)
+- [Authentication](./usage/authentication.md)
 
 ## API reference
 
@@ -45,11 +45,11 @@ projects related to OQTOPUS while following the project's conventions.
 
 ## Citation
 
-You can use the DOI to cite Tranqu in your research.
+You can use the DOI to cite oqtopus-auth in your research.
 
-[![DOI](https://zenodo.org/badge/898082553.svg)](https://zenodo.org/badge/latestdoi/898082553)
+[![DOI](https://zenodo.org/badge/1330600402.svg)](https://zenodo.org/badge/latestdoi/1330600402)
 
-Citation information is also available in the [CITATION](https://github.com/oqtopus-team/tranqu/blob/main/CITATION.cff) file.
+Citation information is also available in the [CITATION](https://github.com/oqtopus-team/oqtopus-auth/blob/main/CITATION.cff) file.
 
 ## Contact
 
@@ -59,8 +59,4 @@ You can contact us by creating an issue in this repository or by email:
 
 ## License
 
-python-project-template is released under the [Apache License 2.0](https://github.com/oqtopus-team/python-project-template/blob/main/LICENSE).
-
-## Supporting
-
-Describe supporting organizations, grants, or contributors here.
+oqtopus-auth is released under the [Apache License 2.0](https://github.com/oqtopus-team/oqtopus-auth/blob/main/LICENSE).

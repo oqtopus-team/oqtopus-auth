@@ -1,7 +1,7 @@
 
 # Development Environment Setup
 
-This guide explains how to set up the development environment for contributing to Python Project Template.  
+This guide explains how to set up the development environment for contributing to OQTOPUS Auth.  
 The project provides a **Makefile** to simplify common development tasks.
 
 ## Prerequisites
@@ -10,14 +10,14 @@ Install the following tools before starting development.
 
 | Tool                                        | Version | Description                        |
 | ------------------------------------------- | ------- | ---------------------------------- |
-| [Python](https://www.python.org/downloads/) | >=3.14  | Python programming language        |
+| [Python](https://www.python.org/downloads/) | >=3.12  | Python programming language        |
 | [uv](https://docs.astral.sh/uv/)            | >=0.10  | Python package and project manager |
 
 Clone the repository:
 
 ```shell
-git clone https://github.com/oqtopus-team/python-project-template.git
-cd python-project-template
+git clone https://github.com/oqtopus-team/oqtopus-auth.git
+cd oqtopus-auth
 ```
 
 ## Project Structure
@@ -25,11 +25,10 @@ cd python-project-template
 The repository is organized as follows:
 
 ```text
-python-project-template/
+oqtopus-auth/
 ├─ src/           # Python package source code
 ├─ tests/         # Test suite
 ├─ docs/          # Documentation sources (MkDocs)
-├─ config/        # Example configuration files (optional)
 ├─ .vscode/       # VSCode settings (optional)
 ├─ .github/       # GitHub workflows and repository settings
 ├─ pyproject.toml # Project configuration and dependencies
@@ -50,7 +49,6 @@ make install
 This command performs the following:
 
 - Installs all dependencies via `uv`.
-- Registers pre-commit hooks to automate code quality checks.
 - Configures the Git commit message template.
 
 ## Linting and Testing

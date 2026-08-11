@@ -55,7 +55,7 @@ jobs:
 
       - name: Documentation Lint
         if: steps.changes.outputs.docs == 'true'
-        run: uv run pymarkdown scan docs
+        run: uv run pymarkdown scan -r docs
 
   test:
     runs-on: ubuntu-latest
@@ -64,8 +64,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Ready for expansion (e.g., ["3.13", "3.14"])
-        python-version: ["3.14"]
+        python-version: ["3.12", "3.13", "3.14"]
 
     steps:
       - name: Checkout
@@ -93,4 +92,5 @@ jobs:
         uses: codecov/codecov-action@v6
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
+          slug: oqtopus-team/oqtopus-auth
           fail_ci_if_error: true

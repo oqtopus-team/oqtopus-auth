@@ -1,87 +1,67 @@
 # Getting Started
 
-!!! note
-    The `config.yaml` and environment variable examples on this page use examples from Tranqu Server.
+## Installation
 
-## Prerequisites
+oqtopus-auth requires Python >=3.12.
 
-Before installing Python Project Template, ensure that the following tools are installed.
-
-### Development Environment
-
-| Tool                                        | Version | Description                        |
-| ------------------------------------------- | ------- | ---------------------------------- |
-| [Python](https://www.python.org/downloads/) | >=3.14  | Python programming language        |
-| [uv](https://docs.astral.sh/uv/)            | >=0.10  | Python package and project manager |
-
-Clone the repository:
+Install the framework-agnostic core:
 
 ```shell
-git clone https://github.com/oqtopus-team/python-project-template.git
-cd python-project-template
+pip install oqtopus-auth
 ```
 
-!!! info
-    To use [ouqu-tp](https://github.com/Qulacs-Osaka/ouqu-tp) as a transpiler,
-    [staq](https://github.com/softwareQinc/staq/blob/main/INSTALL.md) is required.
-    If staq is not installed, it will be automatically installed the first time you use ouqu-tp.
-    The installation of staq takes several minutes.
-
-### Setting Up the Python Environment
-
-To install dependencies:
+If you use the bundled FastAPI middleware and dependencies
+(`oqtopus_auth.fastapi`), install the `fastapi` extra:
 
 ```shell
-uv sync
+pip install "oqtopus-auth[fastapi]"
 ```
 
-## Configurations
+## Core usage (framework-agnostic)
 
-Tranqu Server uses two configuration files:
+Parse an `AuthConfig` from a raw dict (e.g. loaded from your own YAML file)
+and build the configured provider:
 
-- [config.yaml](#configyaml)
-- [logging.yaml](#loggingyaml)
+```python
+from oqtopus_auth import AuthContext, build_provider, parse_auth_config
 
-!!! info
-    You can use environment variables as values in the above YAML files.
+raw_config = {
+    "provider": "none",
+    "none": {"default_account": "admin_user", "default_roles": ["admin"]},
+}
 
-### config.yaml
+auth_config = parse_auth_config(raw_config)
+provider = build_provider(auth_config)
 
-This is the main configuration file for Tranqu Server.
-
-```yaml
-proto: # Settings for Tranqu Server as a gRPC server
-  max_workers: 10 # Maximum number of workers (default: 10)
-  address: "[::]:50051" # Address and port for RPCs (default: "[::]:50051")
+# Any framework's request headers work, as long as they behave like a
+# Mapping[str, str].
+context = AuthContext(context={"authorization": "Bearer ..."})
+user = await provider.authenticate(context)
 ```
 
-### logging.yaml
+## FastAPI usage
 
-This is the logging configuration file for Tranqu Server.
-It is written in YAML format.
-Within Tranqu Server, it is loaded as a `dict`, and then the [logging.config.dictConfig function](https://docs.python.org/3/library/logging.config.html#logging.config.dictConfig) is called to apply the configuration.
+```python
+from fastapi import FastAPI
+from oqtopus_auth import parse_auth_config
+from oqtopus_auth.fastapi import AuthMiddleware, CurrentUser, require_roles
 
-If you use the default settings of `config.yaml`, the `logs` directory is required.
+auth_config = parse_auth_config(raw_config)
 
-```shell
-mkdir logs
+app = FastAPI()
+app.add_middleware(AuthMiddleware, auth_cfg=auth_config)
+
+
+@app.get("/me")
+def me(user: CurrentUser) -> dict:
+    return {"account": user.account if user else None}
+
+
+@app.get("/admin", dependencies=[require_roles("admin")])
+def admin_page() -> dict:
+    return {"ok": True}
 ```
 
-## Hello World Application
-
-To start Hello World Application, run the following command:
-
-```shell
-uv run python -m python_project_template.app -c config/config.yaml -l config/logging.yaml
-```
-
-- `-c` or `--config`: Specifies the path to the main configuration file.
-- `-l` or `--logging`: Specifies the path to the logging configuration file.
-
-When cloned from GitHub, the `worker` in `config.yaml` uses the environment variable `${WORKERS}`,
-and the `address` uses the environment variable `${ADDRESS}`.
-In this case, the Tranqu Server is started with the following command.
-
-```shell
-WORKERS=10 ADDRESS="localhost:50051" uv run python src/tranqu_server/proto/service.py -c config/config.yaml -l config/logging.yaml
-```
+See [Authentication](authentication.md) for the full provider and
+configuration reference, permission-based access control, and real-world
+reverse-proxy examples (Amazon Cognito, Cloudflare Access).

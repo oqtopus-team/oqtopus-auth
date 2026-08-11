@@ -2,17 +2,13 @@ SHELL := bash
 .SHELLFLAGS := -eu -o pipefail -c
 .DEFAULT_GOAL := help
 
-.PHONY: install run format lint test verify docs-lint docs-build docs-serve help
+.PHONY: install format lint test verify docs-lint docs-build docs-serve help
 
 install: ## Install dependencies and configure git hooks and commit template
 	@uv sync --all-groups
 	@if [ -d .git ]; then \
-		uv run pre-commit install; \
 		git config --local commit.template .gitmessage; \
 	fi
-
-run: ## Run the application
-	@uv run python -m python_project_template.app -c config/config.yaml -l config/logging.yaml
 
 format: ## Run code formatting
 	@uv run ruff check --fix
@@ -30,7 +26,7 @@ test: ## Run tests
 verify: format lint test ## Run all verification steps (formatting, linting, testing)
 
 docs-lint: ## Run documentation linting
-	@uv run pymarkdownlnt scan docs
+	@uv run pymarkdownlnt scan -r docs
 
 docs-build: ## Build documentation
 	@uv run mkdocs build

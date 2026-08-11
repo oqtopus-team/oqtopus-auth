@@ -6,32 +6,6 @@
 
 version: 2
 updates:
-  - package-ecosystem: "devcontainers"
-    directory: "/"
-    schedule:
-      interval: monthly
-    cooldown:
-      default-days: 7
-    commit-message:
-      prefix: "chore(devcontainers)"
-    groups:
-      devcontainer-dependencies:
-        patterns:
-          - "*"
-
-  - package-ecosystem: "docker"
-    directory: "/.devcontainer"
-    schedule:
-      interval: monthly
-    cooldown:
-      default-days: 7
-    commit-message:
-      prefix: "chore(docker)"
-    groups:
-      devcontainer-docker:
-        patterns:
-          - "*"
-
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
