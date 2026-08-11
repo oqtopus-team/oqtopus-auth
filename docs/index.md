@@ -4,7 +4,7 @@
 # oqtopus-auth
 
 [![CI](https://github.com/oqtopus-team/oqtopus-auth/actions/workflows/ci.yaml/badge.svg)](https://github.com/oqtopus-team/oqtopus-auth/actions/workflows/ci.yaml)
-[![codecov](https://codecov.io/gh/oqtopus-team/oqtopus-auth/graph/badge.svg?token=RCXTMMXOMV)](https://codecov.io/gh/oqtopus-team/oqtopus-auth)
+[![codecov](https://codecov.io/gh/oqtopus-team/oqtopus-auth/graph/badge.svg?token=4XTC9HSSFV)](https://codecov.io/gh/oqtopus-team/oqtopus-auth)
 [![pypi version](https://img.shields.io/pypi/v/oqtopus-auth.svg)](https://pypi.org/project/oqtopus-auth/)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![slack](https://img.shields.io/badge/slack-OQTOPUS-pink.svg?logo=slack&style=plastic")](https://join.slack.com/t/oqtopus/shared_invite/zt-3bpjb7yc3-Vg8IYSMY1m5wV3DR~TMSnw)
