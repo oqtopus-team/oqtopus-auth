@@ -22,7 +22,7 @@ classifiers = [
 requires-python = ">=3.12,<4.0"
 dependencies = [
   "pydantic>=2.0.0",
-  "pyjwt[crypto]>=2.4.0",
+  "pyjwt[crypto]>=2.13.0",
 ]
 
 [project.optional-dependencies]
@@ -34,13 +34,13 @@ repository = "https://github.com/oqtopus-team/oqtopus-auth"
 
 [dependency-groups]
 dev = [
-  "mypy>=2.1.0",
+  "mypy>=2.3.0",
   "ruff>=0.15.15",
 ]
 test = [
   "fastapi>=0.136.1",
   "httpx>=0.28.1",
-  "pytest>=9.0.3",
+  "pytest>=9.1.1",
   "pytest-cov>=7.1.0",
   "pytest-mock>=3.15.1",
 ]
@@ -50,10 +50,10 @@ docs = [
   "mkdocs-glightbox>=0.5.2",
   "mkdocs-literate-nav>=0.6.3",
   "mkdocs-macros-plugin>=1.5.0",
-  "mkdocs-material>=9.7.6",
-  "mkdocstrings[python]>=1.0.4",
-  "pymarkdownlnt>=0.9.37",
-  "pymdown-extensions>=10.21.3",
+  "mkdocs-material>=9.7.7",
+  "mkdocstrings[python]>=1.0.6",
+  "pymarkdownlnt>=0.9.39",
+  "pymdown-extensions>=11.0.1",
 ]
 
 [build-system]
