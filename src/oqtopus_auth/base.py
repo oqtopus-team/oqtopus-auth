@@ -17,7 +17,7 @@ class AuthUser:
 
     @property
     def role(self) -> str:
-        """Return the primary role for backward-compatible single-role display."""
+        """The primary role, for backward-compatible single-role display."""
         return self.roles[0] if self.roles else ""
 
 

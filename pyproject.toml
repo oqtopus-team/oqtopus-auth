@@ -80,6 +80,7 @@ lint.ignore = [
   "D203",
   "D213",
   "ISC001",
+  "RUF105", # Preview/opinionated rule; this project intentionally uses `# noqa` comments
 ]
 
 [tool.mypy]
