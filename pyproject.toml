@@ -29,6 +29,7 @@ dependencies = [
 
 [project.optional-dependencies]
 fastapi = ["fastapi>=0.136.1"]
+client = ["httpx>=0.28.1"]
 
 [project.urls]
 documentation = "https://oqtopus-auth.readthedocs.io/"

@@ -914,6 +914,9 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+client = [
+    { name = "httpx" },
+]
 fastapi = [
     { name = "fastapi" },
 ]
@@ -945,10 +948,11 @@ test = [
 [package.metadata]
 requires-dist = [
     { name = "fastapi", marker = "extra == 'fastapi'", specifier = ">=0.136.1" },
+    { name = "httpx", marker = "extra == 'client'", specifier = ">=0.28.1" },
     { name = "pydantic", specifier = ">=2.0.0" },
     { name = "pyjwt", extras = ["crypto"], specifier = ">=2.13.0" },
 ]
-provides-extras = ["fastapi"]
+provides-extras = ["fastapi", "client"]
 
 [package.metadata.requires-dev]
 dev = [
