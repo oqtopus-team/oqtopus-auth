@@ -175,6 +175,38 @@ class TestHeaderProviderSignatureVerification:
         with pytest.raises(AuthenticationError, match="invalid JWT"):
             asyncio.run(provider.authenticate(context))
 
+    def test_signature_checked_before_role_gate(self, mocker: MockerFixture) -> None:
+        # A forged token whose (unverified) roles don't match must fail as an
+        # authentication error (invalid JWT), NOT an authorization error — else
+        # the response leaks whether the forged claims would have been allowed.
+        _, public_key = _rsa_keypair()
+        other_private_key, _ = _rsa_keypair()
+        issuer = "https://issuer-order.example.com"
+        signing_key = mocker.Mock(key=public_key)
+        jwk_client = mocker.Mock()
+        jwk_client.get_signing_key_from_jwt.return_value = signing_key
+        mocker.patch(
+            "oqtopus_auth.header_provider.PyJWKClient", return_value=jwk_client
+        )
+        config = HeaderProviderConfig(
+            jwt_header="authorization",
+            user_claim="email",
+            roles_claim="groups",
+            allow_raw_roles=["allowed.*"],
+            signature_verification=SignatureVerificationConfig(
+                enabled=True, issuer=issuer, audience="aud"
+            ),
+        )
+        provider = HeaderProvider(config, role_mappings={})
+        token = pyjwt.encode(
+            {"email": "a@b.com", "groups": ["not-allowed"], "iss": issuer, "aud": "aud"},
+            other_private_key,  # forged signature
+            algorithm="RS256",
+        )
+        context = AuthContext(context={"authorization": f"Bearer {token}"})
+        with pytest.raises(AuthenticationError, match="invalid JWT"):
+            asyncio.run(provider.authenticate(context))
+
     def test_wrong_audience_is_rejected(self, mocker: MockerFixture) -> None:
         private_key, public_key = _rsa_keypair()
         issuer = "https://issuer-wrong-aud.example.com"
