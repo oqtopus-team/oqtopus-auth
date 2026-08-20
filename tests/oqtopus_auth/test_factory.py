@@ -6,16 +6,18 @@ import asyncio
 
 import pytest
 
-from oqtopus_auth.base import AuthContext
+from oqtopus_auth.base import AuthContext, AuthProvider, AuthUser
 from oqtopus_auth.config import (
     AuthConfig,
     HeaderProviderConfig,
     NoneProviderConfig,
+    OidcProviderConfig,
     SignatureVerificationConfig,
 )
-from oqtopus_auth.factory import build_provider
+from oqtopus_auth.factory import build_provider, register_provider
 from oqtopus_auth.header_provider import HeaderProvider
 from oqtopus_auth.null_provider import NullProvider
+from oqtopus_auth.oidc_provider import OidcProvider
 
 
 # ── build_provider ────────────────────────────────────────────────────────────
@@ -75,3 +77,32 @@ class TestBuildProvider:
         cfg = AuthConfig(provider="unknown")
         with pytest.raises(ValueError, match="Unknown auth provider"):
             build_provider(cfg)
+
+    def test_oidc_returns_oidc_provider(self) -> None:
+        cfg = AuthConfig(
+            provider="oidc",
+            oidc=OidcProviderConfig(issuer="https://idp.example.com", audience="api"),
+        )
+        assert isinstance(build_provider(cfg), OidcProvider)
+
+    def test_oidc_without_oidc_config_raises(self) -> None:
+        cfg = AuthConfig(provider="oidc")
+        with pytest.raises(ValueError, match="auth.oidc config is required"):
+            build_provider(cfg)
+
+
+# ── register_provider ────────────────────────────────────────────────────────
+
+
+class TestRegisterProvider:
+    def test_custom_provider_can_be_registered(self) -> None:
+        class _StubProvider(AuthProvider):
+            async def authenticate(self, context: AuthContext) -> AuthUser | None:
+                return AuthUser(account="stub")
+
+        register_provider("stub", lambda _cfg: _StubProvider())
+        provider = build_provider(AuthConfig(provider="stub"))
+        assert isinstance(provider, _StubProvider)
+        user = asyncio.run(provider.authenticate(AuthContext(context={})))
+        assert user is not None
+        assert user.account == "stub"

@@ -22,7 +22,9 @@ classifiers = [
 requires-python = ">=3.12,<4.0"
 dependencies = [
   "pydantic>=2.0.0",
-  "pyjwt[crypto]>=2.4.0",
+  # >=2.13.0: PyJWKClient(timeout=...) needs >=2.7.0, and 2.13.0 hardens JWKS
+  # handling; keep the floor at the currently-locked, security-reviewed version.
+  "pyjwt[crypto]>=2.13.0",
 ]
 
 [project.optional-dependencies]
