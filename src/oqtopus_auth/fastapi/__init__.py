@@ -8,13 +8,14 @@ from .depends import (
     require_permission,
     require_roles,
 )
-from .middleware import AuthMiddleware
+from .middleware import AuthMiddleware, PublicPath
 
 __all__ = [
     "AuthMiddleware",
     "CurrentUser",
     "FastAPIPermissions",
     "FastAPIRoles",
+    "PublicPath",
     "get_current_user",
     "require_permission",
     "require_roles",

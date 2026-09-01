@@ -62,6 +62,58 @@ class TestParseAuthConfig:
         assert config.none is None
         assert config.role_mappings == {"raw.admin": "admin"}
 
+    def test_public_paths_default_to_empty(self) -> None:
+        config = parse_auth_config(
+            {"none": {"default_account": "admin_user", "default_roles": ["admin"]}}
+        )
+        assert config.public_paths == []
+
+    def test_public_paths_are_parsed(self) -> None:
+        config = parse_auth_config(
+            {
+                "none": {"default_account": "admin_user", "default_roles": ["admin"]},
+                "public_paths": [
+                    {"method": "GET", "path": "/health"},
+                    {"path": "/metrics"},  # method omitted -> defaults to "*"
+                ],
+            }
+        )
+        assert len(config.public_paths) == 2
+        assert config.public_paths[0].method == "GET"
+        assert config.public_paths[0].path == "/health"
+        assert config.public_paths[1].method == "*"
+
+    def test_public_identity_defaults_to_none(self) -> None:
+        config = parse_auth_config(
+            {"none": {"default_account": "admin_user", "default_roles": ["admin"]}}
+        )
+        assert config.public_identity is None
+
+    def test_public_identity_is_parsed(self) -> None:
+        config = parse_auth_config(
+            {
+                "none": {"default_account": "admin_user", "default_roles": ["admin"]},
+                "public_identity": {"default_roles": ["public"]},
+            }
+        )
+        assert config.public_identity is not None
+        assert config.public_identity.default_account == "public"
+        assert config.public_identity.default_roles == ["public"]
+
+    def test_public_identity_account_can_be_overridden(self) -> None:
+        config = parse_auth_config(
+            {
+                "none": {"default_account": "admin_user", "default_roles": ["admin"]},
+                "public_identity": {
+                    "default_account": "anonymous",
+                    "default_roles": ["metrics-public"],
+                },
+            }
+        )
+        assert config.public_identity is not None
+        assert config.public_identity.default_account == "anonymous"
+        assert config.public_identity.default_roles == ["metrics-public"]
+
 
 class TestParseHeaderProviderConfigSignatureVerification:
     def test_enabled_without_issuer_or_audience_raises(self) -> None:
