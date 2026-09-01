@@ -43,8 +43,8 @@ class PublicPathConfig(BaseModel):
     "/devices/{device_id}"), matched the same way real routes are.
 
     Note: this only bypasses authentication for requests whose method and
-    path *template* match — it cannot authorize based on path parameter
-    *values* (e.g. "only device X is public"). That kind of check belongs in
+    path *template* match. It cannot authorize based on path parameter
+    *values* (e.g. "only device X is public"); that kind of check belongs in
     the endpoint itself.
     """
 
@@ -55,9 +55,9 @@ class PublicPathConfig(BaseModel):
 class PublicIdentityConfig(BaseModel):
     """Synthetic identity assigned to requests bypassed via ``public_paths``.
 
-    Mirrors ``NoneProviderConfig``'s shape and field names — both describe a
-    synthetic identity for requests that never go through a real provider —
-    but this one is scoped to requests matching ``public_paths`` only,
+    Mirrors ``NoneProviderConfig``'s shape and field names, since both
+    describe a synthetic identity for requests that never go through a real
+    provider. This one is scoped to requests matching ``public_paths`` only,
     instead of applying to every request in the application.
 
     When ``public_identity`` is omitted entirely, requests matching
@@ -72,7 +72,7 @@ class AuthConfig(BaseModel):
     """Top-level authentication configuration.
 
     ``public_paths`` and ``public_identity`` are checked before a provider is
-    invoked, so they apply the same way regardless of ``provider`` — they are
+    invoked, so they apply the same way regardless of ``provider``; they are
     not part of any single provider's configuration. Under ``provider: none``
     they have no practical effect, since every request is already granted
     ``none.default_account`` / ``default_roles`` unconditionally.

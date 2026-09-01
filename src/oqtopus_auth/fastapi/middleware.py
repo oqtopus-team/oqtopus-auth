@@ -33,7 +33,7 @@ class PublicPath:
     so path parameters and type converters (``{p:uuid}``, ``{p:path}``, ...)
     work exactly as they would on an actual route.
 
-    Only matches on method + path *template* — it cannot authorize based on
+    Only matches on method + path *template*; it cannot authorize based on
     a path parameter's *value*. Trailing slashes are not normalized: register
     both ``"/health"`` and ``"/health/"`` if both must be public.
 
@@ -65,12 +65,12 @@ class AuthMiddleware(BaseHTTPMiddleware):
     """Delegates authentication to the configured provider on every request.
 
     Requests matching ``public_paths`` (from ``auth_cfg.public_paths`` and/or
-    the ``public_paths`` constructor argument — the two are merged) skip
+    the ``public_paths`` constructor argument, with the two merged) skip
     authentication entirely. If ``auth_cfg.public_identity`` is set, such
     requests get a synthetic ``AuthUser`` built from it instead of ``None``,
     so that role/permission-based dependencies on the endpoint (e.g.
     ``FastAPIPermissions.require(...)``) can still pass without any code
-    changes to the endpoint — see ``PublicIdentityConfig``.
+    changes to the endpoint. See ``PublicIdentityConfig``.
     """
 
     def __init__(
