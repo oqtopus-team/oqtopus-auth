@@ -39,6 +39,9 @@ class PublicPathConfig(BaseModel):
     """One unauthenticated (method, path-template) pair, as loaded from YAML.
 
     ``method`` is an HTTP method name (e.g. "GET") or "*" for any method.
+    It has no default and must always be given explicitly: a path bypassing
+    authentication for every HTTP method is a deliberate, broader choice
+    that a bare ``path:`` entry should never make by accident.
     ``path`` uses Starlette's path-template syntax (e.g. "/health" or
     "/devices/{device_id}"), matched the same way real routes are.
 
@@ -48,7 +51,7 @@ class PublicPathConfig(BaseModel):
     the endpoint itself.
     """
 
-    method: str = "*"
+    method: str
     path: str
 
 

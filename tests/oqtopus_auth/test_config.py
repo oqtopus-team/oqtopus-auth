@@ -74,7 +74,7 @@ class TestParseAuthConfig:
                 "none": {"default_account": "admin_user", "default_roles": ["admin"]},
                 "public_paths": [
                     {"method": "GET", "path": "/health"},
-                    {"path": "/metrics"},  # method omitted -> defaults to "*"
+                    {"method": "*", "path": "/metrics"},
                 ],
             }
         )
@@ -82,6 +82,18 @@ class TestParseAuthConfig:
         assert config.public_paths[0].method == "GET"
         assert config.public_paths[0].path == "/health"
         assert config.public_paths[1].method == "*"
+
+    def test_public_paths_entry_without_method_raises(self) -> None:
+        with pytest.raises(ValueError, match="method"):
+            parse_auth_config(
+                {
+                    "none": {
+                        "default_account": "admin_user",
+                        "default_roles": ["admin"],
+                    },
+                    "public_paths": [{"path": "/metrics"}],
+                }
+            )
 
     def test_public_identity_defaults_to_none(self) -> None:
         config = parse_auth_config(

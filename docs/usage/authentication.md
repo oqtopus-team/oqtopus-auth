@@ -268,12 +268,13 @@ authentication). Both use the same (method, path-template) matching as real
 FastAPI routes, including path parameters and type converters (e.g.
 `{device_id}`). A request matching either list skips the provider entirely,
 and `request.state.user` is set to `None` (or to a synthetic user, see
-`public_identity` below) so `get_current_user` keeps working. Use
-`method="*"` to match any HTTP method. Matching is on the path *template*
-only: it cannot authorize based on a path parameter's *value* (e.g. "only
-device X is public"), which belongs in the endpoint itself. Trailing
-slashes are not normalized either, so register both `"/health"` and
-`"/health/"` if both must be public.
+`public_identity` below) so `get_current_user` keeps working. `method` has
+no default and must always be given explicitly; pass (or write)
+`method="*"` to match any HTTP method, but only as a deliberate choice, not
+by omission. Matching is on the path *template* only: it cannot authorize
+based on a path parameter's *value* (e.g. "only device X is public"), which
+belongs in the endpoint itself. Trailing slashes are not normalized either,
+so register both `"/health"` and `"/health/"` if both must be public.
 
 `public_paths` and `public_identity` are checked before a provider is
 invoked, so they apply the same way regardless of `provider`; they are not
