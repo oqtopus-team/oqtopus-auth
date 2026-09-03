@@ -12,6 +12,7 @@ from oqtopus_auth.config import (
     HeaderProviderConfig,
     PublicIdentityConfig,
     PublicPathConfig,
+    parse_auth_config,
 )
 from oqtopus_auth.fastapi import (
     AuthMiddleware,
@@ -244,6 +245,30 @@ class TestPublicIdentity:
         resp = client.get("/health")
         assert resp.status_code == 200
         assert resp.json() == {}
+
+    def test_public_identity_empty_dict_in_yaml_sets_default_synthetic_user(
+        self,
+    ) -> None:
+        """Regression test for github.com/oqtopus-team/oqtopus-auth/pull/5#discussion_r3921529535."""
+        auth_cfg = parse_auth_config(
+            {
+                "provider": "header",
+                "header": {"jwt_header": "authorization", "user_claim": "email"},
+                "public_paths": [{"method": "GET", "path": "/health"}],
+                "public_identity": {},
+            }
+        )
+        app = FastAPI()
+        app.add_middleware(AuthMiddleware, auth_cfg=auth_cfg)
+
+        @app.get("/health")
+        def health(user: CurrentUser) -> dict:
+            return {"account": user.account, "roles": user.roles} if user else {}
+
+        client = TestClient(app)
+        resp = client.get("/health")
+        assert resp.status_code == 200
+        assert resp.json() == {"account": "public", "roles": []}
 
     def test_public_identity_sets_synthetic_user(self) -> None:
         client = TestClient(
