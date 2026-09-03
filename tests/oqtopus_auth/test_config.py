@@ -101,6 +101,17 @@ class TestParseAuthConfig:
         )
         assert config.public_identity is None
 
+    def test_public_identity_empty_dict_is_not_treated_as_absent(self) -> None:
+        config = parse_auth_config(
+            {
+                "none": {"default_account": "admin_user", "default_roles": ["admin"]},
+                "public_identity": {},
+            }
+        )
+        assert config.public_identity is not None
+        assert config.public_identity.default_account == "public"
+        assert config.public_identity.default_roles == []
+
     def test_public_identity_is_parsed(self) -> None:
         config = parse_auth_config(
             {

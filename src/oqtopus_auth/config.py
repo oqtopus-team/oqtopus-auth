@@ -149,7 +149,7 @@ def parse_auth_config(raw: dict) -> AuthConfig:
         public_paths=[PublicPathConfig(**p) for p in raw.get("public_paths") or []],
         public_identity=(
             PublicIdentityConfig(**raw["public_identity"])
-            if raw.get("public_identity")
+            if raw.get("public_identity") is not None
             else None
         ),
     )
