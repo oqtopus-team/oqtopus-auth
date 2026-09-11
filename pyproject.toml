@@ -1,6 +1,6 @@
 [project]
 name = "oqtopus-auth"
-version = "0.1.0"
+version = "0.1.1"
 description = "Framework-agnostic authentication and authorization library for the OQTOPUS ecosystem, with optional FastAPI integration"
 readme = "README.md"
 license = "Apache-2.0"
