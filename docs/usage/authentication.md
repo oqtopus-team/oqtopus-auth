@@ -111,6 +111,12 @@ auth:
   role_mappings:
     your-app.operator: operator
     your-app.admin: admin
+  public_paths:                        # optional; default: [] (no paths bypass auth)
+    - method: GET                      # see "Public paths" under FastAPI integration
+      path: /health
+  public_identity:                     # optional; default: none (bypassed requests get no user)
+    default_account: public            # see "Public paths" under FastAPI integration
+    default_roles: [public]
 ```
 
 ### header.*
@@ -251,6 +257,149 @@ app.state.permissions = permissions
 def settings() -> dict:
     return {"ok": True}
 ```
+
+### Public paths (skipping authentication)
+
+Depending on the deployment, some endpoints, such as health checks, may need
+to be reachable without authentication. `AuthMiddleware` accepts a
+`public_paths` argument, and `AuthConfig` accepts a `public_paths` field
+loaded from YAML (optional; defaults to `[]`, i.e. no paths bypass
+authentication). Both use the same (method, path-template) matching as real
+FastAPI routes, including path parameters and type converters (e.g.
+`{device_id}`). A request matching either list skips the provider entirely,
+and `request.state.user` is set to `None` (or to a synthetic user, see
+`public_identity` below) so `get_current_user` keeps working. `method` has
+no default and must always be given explicitly; pass (or write)
+`method="*"` to match any HTTP method, but only as a deliberate choice, not
+by omission. Matching is on the path *template* only: it cannot authorize
+based on a path parameter's *value* (e.g. "only device X is public"), which
+belongs in the endpoint itself. Trailing slashes are not normalized either,
+so register both `"/health"` and `"/health/"` if both must be public.
+
+`public_paths` and `public_identity` are checked before a provider is
+invoked, so they apply the same way regardless of `provider`; they are not
+part of `header`'s or any other provider's configuration. Under
+`provider: none` they have no practical effect, since every request is
+already granted `none.default_account` / `default_roles` unconditionally.
+
+```python
+from oqtopus_auth.fastapi import AuthMiddleware, PublicPath
+
+app.add_middleware(
+    AuthMiddleware,
+    auth_cfg=auth_config,
+    public_paths=[PublicPath("GET", "/health")],
+)
+```
+
+The same paths can be declared in YAML instead of (or in addition to) code;
+the two lists are merged:
+
+```yaml
+auth:
+  provider: header
+  header:
+    jwt_header: authorization
+    user_claim: email
+  public_paths:
+    - method: GET
+      path: /health
+    - method: GET
+      path: /devices/{device_id}
+```
+
+#### Fully public endpoints (no code changes needed)
+
+If the bypassed endpoint has no role/permission dependency at all (a plain
+health check, a static icon, `favicon.ico`), `public_paths` alone is
+enough; there's no need to add `require_permission(...)` or
+`permissions.require(...)` "just in case". As long as `public_identity` is
+left unset, `request.state.user` stays `None` for these requests, so there
+is no user to check a permission or role against. (If the endpoint *does*
+need one to pass, that's what `public_identity` is for, covered next.)
+
+```yaml
+auth:
+  provider: header
+  header:
+    jwt_header: authorization
+    user_claim: email
+  public_paths:
+    - method: GET
+      path: /health
+    - method: GET
+      path: /app-icon
+    - method: GET
+      path: /favicon.ico
+  # public_identity omitted, so request.state.user stays None for these paths
+```
+
+`public_identity` (below) is only needed for the opposite situation: an
+endpoint that already carries a permission/role dependency you don't want
+to touch.
+
+#### `public_identity`: giving bypassed requests a role
+
+By default, a request matching `public_paths` gets `request.state.user =
+None`. That's fine for an endpoint with no role/permission dependency (see
+above), but if the endpoint already has one (e.g.
+`dependencies=[permissions.require("metrics.get")]`), the check still runs
+and rejects the request with 403, since `None` never satisfies a permission
+or role check. Rather than removing that dependency from the endpoint's
+code, set `public_identity` so bypassed requests carry a synthetic user
+instead:
+
+```yaml
+auth:
+  provider: header
+  header:
+    jwt_header: authorization
+    user_claim: email
+  role_mappings:
+    your-app.operator: operator
+    your-app.admin: admin
+  public_paths:
+    - method: GET
+      path: /health
+    - method: GET
+      path: /metrics
+  public_identity:
+    default_account: public          # optional; defaults to "public"
+    default_roles: [public]          # optional; defaults to [] (no synthetic user)
+```
+
+```yaml
+# permissions config (application-owned, see "Permissions" below)
+permissions:
+  operator:
+    - environment.get
+    - environment.create
+  admin:
+    - app_settings.update
+  public:
+    - metrics.get                    # only what /metrics needs, nothing else
+```
+
+Every request matching `public_paths` now gets the same
+`AuthUser(account="public", roles=["public"])`, so `permissions.require
+("metrics.get")` passes without any code change to the `/metrics` endpoint.
+Grant the `public` role only the permissions its public endpoints actually
+need. It behaves like any other role in `permissions:`, so an overly broad
+grant is exposed to every unauthenticated caller.
+
+`public_identity` only helps dependencies that consult `role_permissions`
+at request time (`FastAPIPermissions.require(...)`, `require_permission
+(...)`). A dependency built with `require_roles("admin")` checks for the
+literal role name `"admin"` in code, so granting the synthetic user an
+`"admin"` role to slip past it would be assuming an identity rather than
+being deliberately made public. Prefer `permissions.require(...)` for
+anything you intend to expose this way.
+
+`PublicIdentityConfig` mirrors `NoneProviderConfig`'s field names
+(`default_account` / `default_roles`) because both describe a synthetic
+identity for requests that never go through a real provider. The
+difference is scope: `none` applies it to every request in the application,
+while `public_identity` applies it only to requests matching `public_paths`.
 
 ### Why not standard FastAPI OAuth2 scopes?
 
