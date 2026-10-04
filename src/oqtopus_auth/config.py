@@ -125,14 +125,59 @@ class OidcProviderConfig(BaseModel):
         return self
 
 
+class PublicPathConfig(BaseModel):
+    """One unauthenticated (method, path-template) pair, as loaded from YAML.
+
+    ``method`` is an HTTP method name (e.g. "GET") or "*" for any method.
+    It has no default and must always be given explicitly: a path bypassing
+    authentication for every HTTP method is a deliberate, broader choice
+    that a bare ``path:`` entry should never make by accident.
+    ``path`` uses Starlette's path-template syntax (e.g. "/health" or
+    "/devices/{device_id}"), matched the same way real routes are.
+
+    Note: this only bypasses authentication for requests whose method and
+    path *template* match. It cannot authorize based on path parameter
+    *values* (e.g. "only device X is public"); that kind of check belongs in
+    the endpoint itself.
+    """
+
+    method: str
+    path: str
+
+
+class PublicIdentityConfig(BaseModel):
+    """Synthetic identity assigned to requests bypassed via ``public_paths``.
+
+    Mirrors ``NoneProviderConfig``'s shape and field names, since both
+    describe a synthetic identity for requests that never go through a real
+    provider. This one is scoped to requests matching ``public_paths`` only,
+    instead of applying to every request in the application.
+
+    When ``public_identity`` is omitted entirely, requests matching
+    ``public_paths`` get ``request.state.user = None`` (no identity at all).
+    """
+
+    default_account: str = "public"
+    default_roles: list[str] = []
+
+
 class AuthConfig(BaseModel):
-    """Top-level authentication configuration."""
+    """Top-level authentication configuration.
+
+    ``public_paths`` and ``public_identity`` are checked before a provider is
+    invoked, so they apply the same way regardless of ``provider``; they are
+    not part of any single provider's configuration. Under ``provider: none``
+    they have no practical effect, since every request is already granted
+    ``none.default_account`` / ``default_roles`` unconditionally.
+    """
 
     provider: str = "none"
     none: NoneProviderConfig | None = None  # required when provider == "none"
     header: HeaderProviderConfig | None = None  # required when provider == "header"
     oidc: OidcProviderConfig | None = None  # required when provider == "oidc"
     role_mappings: dict[str, str] = {}
+    public_paths: list[PublicPathConfig] = []
+    public_identity: PublicIdentityConfig | None = None
 
 
 def parse_header_provider_config(raw: dict) -> HeaderProviderConfig:
@@ -213,6 +258,12 @@ def parse_auth_config(raw: dict) -> AuthConfig:
             else None
         ),
         role_mappings=raw.get("role_mappings") or {},
+        public_paths=[PublicPathConfig(**p) for p in raw.get("public_paths") or []],
+        public_identity=(
+            PublicIdentityConfig(**raw["public_identity"])
+            if raw.get("public_identity") is not None
+            else None
+        ),
     )
 
 
