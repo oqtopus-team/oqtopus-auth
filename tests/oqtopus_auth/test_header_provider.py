@@ -20,6 +20,9 @@ from oqtopus_auth.header_provider import (
 )
 
 
+SECRET = "test-secret-key-for-hs256-at-least-32-bytes"
+
+
 # ── extract_token ────────────────────────────────────────────────────────────
 
 
@@ -96,7 +99,7 @@ class TestHeaderProviderAuthenticate:
 
     def test_missing_user_claim_is_rejected(self) -> None:
         provider = self._make_provider()
-        token = pyjwt.encode({"groups": ["admin"]}, "secret", algorithm="HS256")
+        token = pyjwt.encode({"groups": ["admin"]}, SECRET, algorithm="HS256")
         context = AuthContext(context={"authorization": f"Bearer {token}"})
         with pytest.raises(AuthenticationError, match="missing user identifier claim"):
             asyncio.run(provider.authenticate(context))
@@ -104,7 +107,7 @@ class TestHeaderProviderAuthenticate:
     def test_present_user_claim_is_accepted(self) -> None:
         provider = self._make_provider()
         token = pyjwt.encode(
-            {"email": "a@b.com", "groups": ["admin"]}, "secret", algorithm="HS256"
+            {"email": "a@b.com", "groups": ["admin"]}, SECRET, algorithm="HS256"
         )
         context = AuthContext(context={"authorization": f"Bearer {token}"})
         user = asyncio.run(provider.authenticate(context))
