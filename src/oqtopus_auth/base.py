@@ -9,11 +9,18 @@ from dataclasses import dataclass, field
 
 @dataclass
 class AuthUser:
-    """Authenticated user extracted from JWT claims."""
+    """Authenticated principal extracted from a token or upstream proxy header.
+
+    Represents both human users (``account`` = user id / email) and machine
+    clients (``account`` = OAuth2 client id). ``scopes`` carries the granted
+    OAuth2 scopes for machine-to-machine callers; it is empty for role-based
+    human sessions.
+    """
 
     account: str
     roles: list[str] = field(default_factory=list)
     raw_groups: list[str] = field(default_factory=list)
+    scopes: frozenset[str] = frozenset()
 
     @property
     def role(self) -> str:
@@ -22,11 +29,32 @@ class AuthUser:
 
 
 class AuthenticationError(Exception):
-    """Raised by a provider when the request should be rejected with 403."""
+    """The caller could not be authenticated (missing/invalid credentials).
+
+    In an HTTP adapter this maps to **401 Unauthorized** for API (JSON)
+    responses. The legacy HTML adapter renders every rejection as 403.
+    """
 
     def __init__(self, reason: str) -> None:
         super().__init__(reason)
         self.reason = reason
+
+
+class AuthorizationError(AuthenticationError):
+    """The caller was authenticated but is not permitted (e.g. lacks a role).
+
+    Subclasses :class:`AuthenticationError` so existing handlers that catch the
+    latter keep working. In an HTTP adapter this maps to **403 Forbidden**.
+    """
+
+
+class InsufficientScopeError(AuthorizationError):
+    """The caller's token lacks a required OAuth2 scope.
+
+    A specialization of :class:`AuthorizationError` so an HTTP adapter can emit
+    the RFC 6750 ``error="insufficient_scope"`` challenge, distinct from a
+    generic RBAC (role) denial.
+    """
 
 
 class AuthContext(Mapping[str, str]):

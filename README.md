@@ -12,14 +12,26 @@
 ## Overview
 
 **OQTOPUS Auth** is a framework-agnostic authentication and authorization
-library for the OQTOPUS ecosystem. It ships pluggable authentication
-providers (disabled auth, and reverse-proxy-injected JWT headers) plus a
-role/permission model, with an optional FastAPI integration.
+library for the OQTOPUS ecosystem. It ships pluggable authentication providers:
+
+- `none` — authentication disabled (local development).
+- `header` — trust a JWT injected by a trusted reverse proxy (e.g. oauth2-proxy,
+  Cloudflare Access).
+- `oidc` — verify an `Authorization: Bearer` token directly against the issuer's
+  JWKS (`iss`/`exp`/`aud` or `client_id`) and optionally enforce an OAuth2
+  `scope`; for services that are the resource server (M2M / client-credentials,
+  or an API with no edge authorizer).
+
+It also provides a role/permission model, an optional FastAPI integration, and a
+client-credentials token provider for the *calling* side of an `oidc`-protected
+service.
 
 ```shell
 pip install oqtopus-auth
-# or, with FastAPI middleware and dependencies:
+# with the FastAPI middleware and dependencies:
 pip install "oqtopus-auth[fastapi]"
+# with the client-credentials token provider (ClientCredentialsTokenProvider):
+pip install "oqtopus-auth[client]"
 ```
 
 ## Documentation

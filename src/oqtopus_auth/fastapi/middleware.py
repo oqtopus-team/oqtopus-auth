@@ -2,13 +2,19 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, override
+from typing import TYPE_CHECKING, Literal, override
 
-from fastapi.responses import HTMLResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.routing import Match, Route
 
-from ..base import AuthContext, AuthenticationError, AuthUser  # noqa: TID252
+from ..base import (  # noqa: TID252
+    AuthContext,
+    AuthenticationError,
+    AuthorizationError,
+    AuthUser,
+    InsufficientScopeError,
+)
 from ..factory import build_provider  # noqa: TID252
 
 if TYPE_CHECKING:
@@ -19,6 +25,9 @@ if TYPE_CHECKING:
     from starlette.types import ASGIApp, Scope
 
     from ..config import AuthConfig  # noqa: TID252
+
+_HTTP_UNAUTHORIZED = 401
+_HTTP_FORBIDDEN = 403
 
 
 def _noop_endpoint() -> None:  # pragma: no cover - only used for path matching
@@ -71,16 +80,33 @@ class AuthMiddleware(BaseHTTPMiddleware):
     so that role/permission-based dependencies on the endpoint (e.g.
     ``FastAPIPermissions.require(...)``) can still pass without any code
     changes to the endpoint. See ``PublicIdentityConfig``.
+
+    ``response_format`` selects how rejections are rendered:
+
+    - ``"html"`` (default): every rejection is a ``403`` HTML body, preserving
+      the original server-rendered-app behavior.
+    - ``"json"``: an :class:`InsufficientScopeError` becomes ``403`` (with an
+      ``insufficient_scope`` challenge), any other :class:`AuthorizationError`
+      becomes ``403``, and any other :class:`AuthenticationError` becomes
+      ``401`` -- all as ``{"detail": ...}`` JSON, the right contract for an API.
     """
 
     def __init__(
         self,
         app: ASGIApp,
         auth_cfg: AuthConfig,
+        response_format: Literal["html", "json"] = "html",
         public_paths: Sequence[PublicPath] = (),
     ) -> None:
         super().__init__(app)
+        # Validate at construction: the Literal annotation is not enforced at
+        # runtime, so a typo like "JSON" would otherwise silently fall back to
+        # HTML responses instead of the intended JSON API contract.
+        if response_format not in {"html", "json"}:
+            msg = f'response_format must be "html" or "json", got {response_format!r}'
+            raise ValueError(msg)
         self._provider = build_provider(auth_cfg)
+        self._response_format = response_format
         config_paths = tuple(
             PublicPath(p.method, p.path) for p in auth_cfg.public_paths
         )
@@ -100,7 +126,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         request: Request,
         call_next: RequestResponseEndpoint,
     ) -> Response:
-        """Delegate to the provider and return 403 on AuthenticationError.
+        """Delegate to the provider and reject on auth failure.
 
         Requests matching ``public_paths`` skip the provider entirely;
         ``request.state.user`` is set to the configured ``public_identity``
@@ -108,8 +134,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
         as ``get_current_user`` keep working without raising.
 
         Returns:
-            403 response if the provider raises ``AuthenticationError``; otherwise
-            the downstream response with ``request.state.user`` set.
+            The downstream response with ``request.state.user`` set, or an
+            auth-failure response (401/403 per ``response_format``).
 
         """
         request.state.user = None
@@ -120,5 +146,27 @@ class AuthMiddleware(BaseHTTPMiddleware):
             auth_context = AuthContext(context=request.headers)
             request.state.user = await self._provider.authenticate(auth_context)
         except AuthenticationError as e:
-            return HTMLResponse(f"403 Forbidden: {e.reason}", status_code=403)
+            return self._reject(e)
         return await call_next(request)
+
+    def _reject(self, error: AuthenticationError) -> Response:
+        if self._response_format == "json":
+            headers: dict[str, str] = {}
+            if isinstance(error, InsufficientScopeError):
+                # RFC 6750 §3.1: only a missing *scope* is insufficient_scope.
+                status = _HTTP_FORBIDDEN
+                headers["WWW-Authenticate"] = 'Bearer error="insufficient_scope"'
+            elif isinstance(error, AuthorizationError):
+                # Generic RBAC denial: 403 with no scope-specific challenge.
+                status = _HTTP_FORBIDDEN
+            else:
+                status = _HTTP_UNAUTHORIZED
+                headers["WWW-Authenticate"] = "Bearer"
+            return JSONResponse(
+                status_code=status,
+                content={"detail": error.reason},
+                headers=headers,
+            )
+        return HTMLResponse(
+            f"403 Forbidden: {error.reason}", status_code=_HTTP_FORBIDDEN
+        )

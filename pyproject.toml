@@ -1,6 +1,6 @@
 [project]
 name = "oqtopus-auth"
-version = "0.1.1"
+version = "0.2.0"
 description = "Framework-agnostic authentication and authorization library for the OQTOPUS ecosystem, with optional FastAPI integration"
 readme = "README.md"
 license = "Apache-2.0"
@@ -22,11 +22,14 @@ classifiers = [
 requires-python = ">=3.12,<4.0"
 dependencies = [
   "pydantic>=2.0.0",
-  "pyjwt[crypto]>=2.4.0",
+  # >=2.13.0: PyJWKClient(timeout=...) needs >=2.7.0, and 2.13.0 hardens JWKS
+  # handling; keep the floor at the currently-locked, security-reviewed version.
+  "pyjwt[crypto]>=2.13.0",
 ]
 
 [project.optional-dependencies]
 fastapi = ["fastapi>=0.136.1"]
+client = ["httpx>=0.28.1"]
 
 [project.urls]
 documentation = "https://oqtopus-auth.readthedocs.io/"

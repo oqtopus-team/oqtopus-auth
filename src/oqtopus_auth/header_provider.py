@@ -10,7 +10,13 @@ from typing import TYPE_CHECKING, override
 import jwt
 from jwt import PyJWKClient
 
-from .base import AuthContext, AuthenticationError, AuthProvider, AuthUser
+from .base import (
+    AuthContext,
+    AuthenticationError,
+    AuthorizationError,
+    AuthProvider,
+    AuthUser,
+)
 
 if TYPE_CHECKING:
     from .config import (
@@ -116,8 +122,9 @@ class HeaderProvider(AuthProvider):
             Authenticated ``AuthUser``.
 
         Raises:
-            AuthenticationError: If the JWT is missing/invalid, no roles match,
-                or signature verification fails.
+            AuthenticationError: If the JWT is missing/invalid or signature
+                verification fails.
+            AuthorizationError: If no role matches ``allow_raw_roles``.
 
         """
         header_config = self._header_config
@@ -136,6 +143,22 @@ class HeaderProvider(AuthProvider):
             logger.warning("JWT decode failed: %s", exc)
             msg = "invalid JWT"
             raise AuthenticationError(msg) from None
+
+        # Verify signature BEFORE any authorization decision. Otherwise a forged
+        # token whose (unverified) roles don't match would leak a 403 while a
+        # matching one leaks a 401 -- an authz/authn oracle over unverified
+        # claims. Once verification is enabled, authentication must come first.
+        sig = header_config.signature_verification
+        if sig and sig.enabled:
+            try:
+                # _verify_jwt does blocking network I/O (JWKS fetch); keep it
+                # off the event loop so one slow/unreachable issuer doesn't
+                # stall every other in-flight request.
+                await asyncio.to_thread(_verify_jwt, token, sig)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("JWT verification failed: %s", exc)
+                msg = "invalid JWT"
+                raise AuthenticationError(msg) from None  # hide internal details
 
         account = str(_get_claim(payload, header_config.user_claim) or "")
         if not account:
@@ -157,23 +180,11 @@ class HeaderProvider(AuthProvider):
             allowed = raw_groups
 
         if not allowed:
+            # Authenticated (signature verified when enabled) but not permitted.
             msg = "no allowed role"
-            raise AuthenticationError(msg)
+            raise AuthorizationError(msg)
 
         # Map to display name; fall back to raw value if unmapped
         roles = [self._role_mappings.get(raw_role, raw_role) for raw_role in allowed]
-
-        # Verify signature if enabled
-        sig = header_config.signature_verification
-        if sig and sig.enabled:
-            try:
-                # _verify_jwt does blocking network I/O (JWKS fetch); keep it
-                # off the event loop so one slow/unreachable issuer doesn't
-                # stall every other in-flight request.
-                await asyncio.to_thread(_verify_jwt, token, sig)
-            except Exception as exc:  # noqa: BLE001
-                logger.warning("JWT verification failed: %s", exc)
-                msg = "invalid JWT"
-                raise AuthenticationError(msg) from None  # hide internal details
 
         return AuthUser(account=account, roles=roles, raw_groups=raw_groups)
