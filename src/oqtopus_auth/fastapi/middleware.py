@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, override
+from typing import TYPE_CHECKING, Literal, override
 
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -95,10 +95,16 @@ class AuthMiddleware(BaseHTTPMiddleware):
         self,
         app: ASGIApp,
         auth_cfg: AuthConfig,
-        response_format: str = "html",
+        response_format: Literal["html", "json"] = "html",
         public_paths: Sequence[PublicPath] = (),
     ) -> None:
         super().__init__(app)
+        # Validate at construction: the Literal annotation is not enforced at
+        # runtime, so a typo like "JSON" would otherwise silently fall back to
+        # HTML responses instead of the intended JSON API contract.
+        if response_format not in {"html", "json"}:
+            msg = f'response_format must be "html" or "json", got {response_format!r}'
+            raise ValueError(msg)
         self._provider = build_provider(auth_cfg)
         self._response_format = response_format
         config_paths = tuple(

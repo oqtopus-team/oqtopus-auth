@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+
 import httpx
 import pytest
 from pytest_mock import MockerFixture
@@ -44,16 +46,69 @@ class TestClientCredentialsTokenProvider:
         assert provider.get_token() == "tok-1"
         post.assert_called_once()
 
-    def test_client_credentials_grant_and_scope_sent(
-        self, mocker: MockerFixture
-    ) -> None:
+    def test_basic_auth_is_default(self, mocker: MockerFixture) -> None:
         post = mocker.patch("httpx.post", return_value=_ok(mocker))
         _make_provider().get_token()
         _, kwargs = post.call_args
         assert kwargs["data"]["grant_type"] == "client_credentials"
-        assert kwargs["data"]["client_id"] == "oqtopus-engine"
         assert kwargs["data"]["scope"] == "provider.write"
         assert kwargs["timeout"] > 0
+        # Default is client_secret_basic: credentials in the Authorization header,
+        # not the request body.
+        assert "client_id" not in kwargs["data"]
+        auth = kwargs["headers"]["Authorization"]
+        assert auth.startswith("Basic ")
+        decoded = base64.b64decode(auth.removeprefix("Basic ")).decode()
+        assert decoded == "oqtopus-engine:secret"
+
+    def test_post_auth_style_sends_credentials_in_body(
+        self, mocker: MockerFixture
+    ) -> None:
+        post = mocker.patch("httpx.post", return_value=_ok(mocker))
+        _make_provider(auth_style="post").get_token()
+        _, kwargs = post.call_args
+        assert kwargs["data"]["client_id"] == "oqtopus-engine"
+        assert kwargs["data"]["client_secret"] == "secret"
+        assert "Authorization" not in kwargs["headers"]
+
+    def test_basic_auth_url_encodes_special_characters(
+        self, mocker: MockerFixture
+    ) -> None:
+        post = mocker.patch("httpx.post", return_value=_ok(mocker))
+        _make_provider(
+            client_id="id:with/special", client_secret="p@ss:w rd"
+        ).get_token()
+        _, kwargs = post.call_args
+        auth = kwargs["headers"]["Authorization"]
+        decoded = base64.b64decode(auth.removeprefix("Basic ")).decode()
+        # RFC 6749 §2.3.1: each credential is application/x-www-form-urlencoded
+        # before the ":" join -- note a space becomes "+", not "%20".
+        assert decoded == "id%3Awith%2Fspecial:p%40ss%3Aw+rd"
+
+    def test_short_lived_token_is_still_cached(self, mocker: MockerFixture) -> None:
+        # expires_in (30) <= default skew (60): the clamp must still cache it,
+        # otherwise it would be treated as already-expired and refetched each call.
+        post = mocker.patch("httpx.post", return_value=_ok(mocker, expires_in=30))
+        mocker.patch(
+            "oqtopus_auth.client.client_credentials.time.monotonic",
+            side_effect=[0.0, 5.0],  # requested_at=0 -> expiry 0+30-15=15; check at 5
+        )
+        provider = _make_provider()  # default skew 60
+        assert provider.get_token() == "tok-1"
+        assert provider.get_token() == "tok-1"
+        post.assert_called_once()
+
+    def test_negative_skew_rejected(self) -> None:
+        with pytest.raises(ValueError, match="expiry_skew_seconds"):
+            _make_provider(expiry_skew_seconds=-1)
+
+    def test_nonpositive_timeout_rejected(self) -> None:
+        with pytest.raises(ValueError, match="timeout_seconds"):
+            _make_provider(timeout_seconds=0)
+
+    def test_unknown_auth_style_rejected(self) -> None:
+        with pytest.raises(ValueError, match="auth_style"):
+            _make_provider(auth_style="basci")  # typo must not fall back to post
 
     def test_refresh_after_expiry(self, mocker: MockerFixture) -> None:
         post = mocker.patch(

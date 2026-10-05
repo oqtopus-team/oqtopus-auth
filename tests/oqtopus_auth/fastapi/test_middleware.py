@@ -410,3 +410,18 @@ class TestPublicIdentity:
         )
         resp = client.get("/health-gated")
         assert resp.status_code == 200
+
+
+def test_invalid_response_format_raises() -> None:
+    # The Literal annotation is not enforced at runtime; a typo like "JSON" must
+    # be rejected at construction, not silently fall back to HTML.
+    auth_cfg = AuthConfig(
+        provider="header",
+        header=HeaderProviderConfig(jwt_header="authorization", user_claim="email"),
+    )
+    with pytest.raises(ValueError, match="response_format"):
+        AuthMiddleware(
+            lambda *_a, **_k: None,  # type: ignore[arg-type]
+            auth_cfg,
+            response_format="JSON",  # type: ignore[arg-type]
+        )

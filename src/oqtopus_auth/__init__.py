@@ -29,6 +29,7 @@ from .oidc import (
     extract_scopes,
     has_required_scope,
     verify_bearer_token,
+    verify_bearer_token_async,
 )
 from .oidc_provider import OidcProvider
 from .permissions import Permissions, has_permission, parse_role_permissions
@@ -63,4 +64,5 @@ __all__ = [
     "parse_role_permissions",
     "register_provider",
     "verify_bearer_token",
+    "verify_bearer_token_async",
 ]

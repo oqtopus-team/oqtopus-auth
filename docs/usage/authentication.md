@@ -17,7 +17,8 @@ oqtopus-auth provides pluggable authentication providers, driven by an
 | `provider` | Description |
 |------------|-------------|
 | `none` | Authentication is disabled. All requests are allowed without a real user identity. Suitable for local development only. |
-| `header` | Extracts user identity from a JWT carried in an HTTP header injected by a trusted reverse proxy (e.g. AWS ALB + Amazon Cognito via oauth2-proxy, or Cloudflare Access). |
+| `header` | **Trusts** a JWT carried in an HTTP header injected by a trusted reverse proxy (e.g. AWS ALB + Amazon Cognito via oauth2-proxy, or Cloudflare Access). The proxy is the verifier. |
+| `oidc` | **Verifies** the incoming `Authorization: Bearer` token itself (signature via JWKS, `iss`/`exp`, and `aud` or `client_id`) and can enforce an OAuth2 `required_scope`. For when the app is the resource server (M2M / client-credentials callers, or an API with no edge authorizer). See [provider: oidc](#provider-oidc-verify-first). |
 
 ## provider: none
 
@@ -258,6 +259,69 @@ For an issuer whose access tokens *do* carry an `aud` (e.g. Keycloak with an
 audience mapper, or Cognito with a resource binding), use `audience:` to verify
 it — optionally alongside `client_id`.
 
+### Example: Keycloak (audience mapper)
+
+Keycloak can add an `aud` claim to access tokens via an *Audience* protocol
+mapper, so the standard `audience` check applies:
+
+```yaml
+auth:
+  provider: oidc
+  oidc:
+    issuer: "https://keycloak.example.com/realms/oqtopus"
+    audience: "oqtopus-user-api"   # the audience mapper's value
+    required_scope: "provider.write"   # optional OAuth2 scope gate (M2M)
+    principal_claim: sub
+    roles_claim: ["realm_access", "roles"]  # nested claim path (list, not "a.b")
+```
+
+`allow_any_audience: true` disables the `aud` check entirely — **dangerous**: it
+accepts any token minted by the issuer for any resource. Use it only for issuers
+that do not scope tokens per resource, and never on a publicly-exposed endpoint.
+
+### JSON vs HTML error responses
+
+By default the FastAPI middleware renders auth failures as `403` HTML (suited to
+a server-rendered app). For a JSON API, pass `response_format="json"` to
+`AuthMiddleware`: an authentication failure is then `401` and an authorization
+failure `403`, both as `{"detail": ...}`, with a `WWW-Authenticate` challenge
+(and `insufficient_scope` for a missing scope).
+
+### Blocking I/O from async code
+
+`verify_bearer_token` performs **blocking** network I/O (JWKS fetch / discovery)
+on first use and on key rotation. `OidcProvider` already offloads it via
+`asyncio.to_thread`; if you call verification directly from an `async def`
+handler, use `verify_bearer_token_async` (or wrap `verify_bearer_token` in
+`asyncio.to_thread`) so a slow IdP does not stall the event loop.
+
+### Machine-to-machine clients (`client` extra)
+
+The *caller* side of an `oidc`-protected service obtains a token with the OAuth2
+client-credentials grant via `ClientCredentialsTokenProvider` (install the
+`client` extra: `pip install "oqtopus-auth[client]"`). It fetches and caches the
+token until shortly before it expires. It is synchronous; from async code call
+`get_token()` via `asyncio.to_thread`.
+
+```python
+from oqtopus_auth.client import ClientCredentialsTokenProvider
+
+tokens = ClientCredentialsTokenProvider(
+    token_url="https://keycloak.example.com/realms/oqtopus/protocol/openid-connect/token",
+    client_id="oqtopus-engine",
+    client_secret="...",
+    scope="provider.write",
+    # auth_style defaults to "basic" (client_secret_basic); "post" also available.
+)
+bearer = tokens.get_token()
+```
+
+### Custom providers (`register_provider`)
+
+To add a provider beyond `none` / `header` / `oidc`, register a factory with
+`register_provider(name, factory)`; `build_provider` (and the FastAPI
+middleware) will then accept `provider: <name>`.
+
 ## Permissions
 
 `oqtopus_auth.permissions` provides a small role → permission model that is
@@ -470,8 +534,9 @@ while `public_identity` applies it only to requests matching `public_paths`.
 ### Why not standard FastAPI OAuth2 scopes?
 
 FastAPI provides `Security(dep, scopes=[...])` and `SecurityScopes` for
-scope-based access control, which integrates with the OpenAPI/Swagger UI.
-oqtopus-auth deliberately does not use this pattern, for two reasons:
+scope-based access control, which integrates with the OpenAPI/Swagger UI. For
+the **`header` provider** (the subject of this section), oqtopus-auth
+deliberately does not use this pattern, for two reasons:
 
 **Different authorization model.** FastAPI's OAuth2 scopes are designed for
 flows where the *client* requests specific scopes at login time (e.g.
@@ -480,11 +545,20 @@ oqtopus-auth's `header` provider implements RBAC: the *server* maps
 proxy-injected roles to permissions at request time. The client has no role
 in choosing scopes.
 
-**Non-standard token injection.** Tokens are injected by a trusted reverse
-proxy (e.g. oauth2-proxy, Cloudflare Access), not obtained through an OAuth2
-token endpoint. FastAPI's `OAuth2PasswordBearer` and `HTTPBearer` schemes
-assume a specific flow (token endpoint or `Authorization: Bearer`) that does
-not match custom headers such as `cf-access-jwt-assertion`.
+**Non-standard token injection.** With the `header` provider, tokens are
+injected by a trusted reverse proxy (e.g. oauth2-proxy, Cloudflare Access), not
+obtained through an OAuth2 token endpoint. FastAPI's `OAuth2PasswordBearer` and
+`HTTPBearer` schemes assume a specific flow (token endpoint or
+`Authorization: Bearer`) that does not match custom headers such as
+`cf-access-jwt-assertion`.
+
+> **Note — the `oidc` provider.** The `oidc` provider *does* accept a standard
+> `Authorization: Bearer` token and verifies it directly, and it *does* support
+> an OAuth2 `required_scope` (useful for client-credentials / M2M callers that
+> carry a `scope` but no roles). It still enforces that scope internally
+> (`has_required_scope` / an `InsufficientScopeError`) rather than via FastAPI's
+> `Security(scopes=...)`, so the OpenAPI-documentation trade-off below applies to
+> both providers.
 
 **Consequence.** Permission enforcement uses
 `Depends(require_permission("scope"))` instead of

@@ -30,13 +30,14 @@ def _rsa_keypair() -> tuple[RSAPrivateKey, RSAPublicKey]:
 
 
 def _mock_jwks(mocker: MockerFixture, public_key: RSAPublicKey) -> None:
-    # verify_bearer_token resolves keys via oqtopus_auth.oidc._jwks_client, an
-    # lru_cache over jwt.PyJWKClient — clear it and patch the client factory.
+    # verify_bearer_token resolves keys via oqtopus_auth.oidc._jwks_client (an
+    # lru_cache). Patch that factory directly so the real (rate-limited) client
+    # is never constructed; clear the cache first so a prior real client is gone.
     oidc._jwks_client.cache_clear()
     signing_key = mocker.Mock(key=public_key)
     jwk_client = mocker.Mock()
     jwk_client.get_signing_key_from_jwt.return_value = signing_key
-    mocker.patch("oqtopus_auth.oidc.jwt.PyJWKClient", return_value=jwk_client)
+    mocker.patch("oqtopus_auth.oidc._jwks_client", return_value=jwk_client)
 
 
 def _encode(private_key: RSAPrivateKey, claims: dict[str, object]) -> str:
@@ -263,3 +264,52 @@ class TestCognitoAccessToken:
         token = self._token(private_key, client_id=bad_claim)
         with pytest.raises(AuthenticationError, match="invalid bearer token"):
             asyncio.run(self._cognito_provider().authenticate(_bearer(token)))
+
+
+class TestOidcProviderAllowAnyAudience:
+    def test_warns_at_init_and_skips_aud(
+        self, mocker: MockerFixture, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        private_key, public_key = _rsa_keypair()
+        _mock_jwks(mocker, public_key)
+        cfg = OidcProviderConfig(
+            issuer=ISSUER,
+            jwks_url="https://idp.example.com/jwks",
+            allow_any_audience=True,
+            required_scope=None,
+        )
+        with caplog.at_level("WARNING"):
+            provider = OidcProvider(cfg)
+        assert any("allow_any_audience" in r.getMessage() for r in caplog.records)
+        # A token with NO aud is accepted when aud verification is disabled.
+        token = _encode(private_key, {"iss": ISSUER, "sub": "someone"})
+        user = asyncio.run(provider.authenticate(_bearer(token)))
+        assert user is not None
+        assert user.account == "someone"
+
+
+class TestOidcProviderRoles:
+    def test_roles_claim_resolved_and_mapped(self, mocker: MockerFixture) -> None:
+        private_key, public_key = _rsa_keypair()
+        _mock_jwks(mocker, public_key)
+        cfg = OidcProviderConfig(
+            issuer=ISSUER,
+            jwks_url="https://idp.example.com/jwks",
+            audience=AUDIENCE,
+            required_scope=None,
+            roles_claim="groups",
+        )
+        provider = OidcProvider(cfg, role_mappings={"grp-admin": "admin"})
+        token = _encode(
+            private_key,
+            {
+                "iss": ISSUER,
+                "aud": AUDIENCE,
+                "sub": "u",
+                "groups": ["grp-admin", "other"],
+            },
+        )
+        user = asyncio.run(provider.authenticate(_bearer(token)))
+        assert user is not None
+        assert "admin" in user.roles
+        assert "other" in user.roles
