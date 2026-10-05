@@ -166,3 +166,100 @@ class TestOidcProviderAuthenticate:
         user = asyncio.run(OidcProvider(cfg).authenticate(_bearer(token)))
         assert user is not None
         assert user.account == "someone"
+
+
+COGNITO_CLIENT_ID = "app-client-123"
+
+
+class TestCognitoAccessToken:
+    """Access tokens with no `aud`, bound by `client_id` + `token_use` (Cognito)."""
+
+    @staticmethod
+    def _cognito_provider(**overrides: object) -> OidcProvider:
+        kwargs: dict[str, object] = {
+            "issuer": ISSUER,
+            "jwks_url": "https://idp.example.com/jwks",
+            "audience": None,
+            "client_id": COGNITO_CLIENT_ID,
+            "token_use": "access",
+            "principal_claim": "sub",
+            "required_scope": None,
+        }
+        kwargs.update(overrides)
+        return OidcProvider(OidcProviderConfig(**kwargs))  # type: ignore[arg-type]
+
+    @staticmethod
+    def _token(private_key: RSAPrivateKey, **claims: object) -> str:
+        # Shape of a Cognito access token: no `aud`, carries client_id/token_use.
+        base: dict[str, object] = {
+            "iss": ISSUER,
+            "client_id": COGNITO_CLIENT_ID,
+            "token_use": "access",
+            "sub": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+            "username": "generated-cognito-username",
+            "scope": "aws.cognito.signin.user.admin",
+        }
+        base.update(claims)
+        return _encode(private_key, base)
+
+    def test_valid_access_token_authenticates(self, mocker: MockerFixture) -> None:
+        private_key, public_key = _rsa_keypair()
+        _mock_jwks(mocker, public_key)
+        user = asyncio.run(
+            self._cognito_provider().authenticate(_bearer(self._token(private_key)))
+        )
+        assert user is not None
+        assert user.account == "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+
+    def test_wrong_client_id_is_rejected(self, mocker: MockerFixture) -> None:
+        private_key, public_key = _rsa_keypair()
+        _mock_jwks(mocker, public_key)
+        token = self._token(private_key, client_id="some-other-client")
+        with pytest.raises(AuthenticationError, match="invalid bearer token"):
+            asyncio.run(self._cognito_provider().authenticate(_bearer(token)))
+
+    def test_missing_client_id_claim_is_rejected(self, mocker: MockerFixture) -> None:
+        private_key, public_key = _rsa_keypair()
+        _mock_jwks(mocker, public_key)
+        # Drop client_id by signing a token without it.
+        claims: dict[str, object] = {
+            "iss": ISSUER,
+            "token_use": "access",
+            "sub": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+            "username": "generated-cognito-username",
+        }
+        token = _encode(private_key, claims)
+        with pytest.raises(AuthenticationError, match="invalid bearer token"):
+            asyncio.run(self._cognito_provider().authenticate(_bearer(token)))
+
+    def test_wrong_token_use_is_rejected(self, mocker: MockerFixture) -> None:
+        # An id token (token_use="id") must not pass where access is required.
+        private_key, public_key = _rsa_keypair()
+        _mock_jwks(mocker, public_key)
+        token = self._token(private_key, token_use="id")
+        with pytest.raises(AuthenticationError, match="invalid bearer token"):
+            asyncio.run(self._cognito_provider().authenticate(_bearer(token)))
+
+    def test_accepts_one_of_several_client_ids(self, mocker: MockerFixture) -> None:
+        private_key, public_key = _rsa_keypair()
+        _mock_jwks(mocker, public_key)
+        provider = self._cognito_provider(client_id=["other", COGNITO_CLIENT_ID])
+        user = asyncio.run(provider.authenticate(_bearer(self._token(private_key))))
+        assert user is not None
+        assert user.account == "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+
+    @pytest.mark.parametrize(
+        "bad_claim",
+        [["app-client-123"], {"id": "app-client-123"}],
+        ids=["array", "object"],
+    )
+    def test_non_string_client_id_claim_is_401_not_500(
+        self, mocker: MockerFixture, bad_claim: object
+    ) -> None:
+        # A crafted token whose client_id claim is unhashable (array/object) must
+        # map to 401, not surface as a 500 via an unhandled TypeError.
+        private_key, public_key = _rsa_keypair()
+        _mock_jwks(mocker, public_key)
+        token = self._token(private_key, client_id=bad_claim)
+        with pytest.raises(AuthenticationError, match="invalid bearer token"):
+            asyncio.run(self._cognito_provider().authenticate(_bearer(token)))

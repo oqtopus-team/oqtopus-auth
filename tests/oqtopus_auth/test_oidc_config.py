@@ -26,8 +26,8 @@ class TestOidcProviderConfigValidation:
         with pytest.raises(ValidationError):
             OidcProviderConfig(issuer=ISSUER, audience="api", audence="api")  # type: ignore[call-arg]
 
-    def test_audience_required_by_default(self) -> None:
-        with pytest.raises(ValidationError, match="audience is required"):
+    def test_token_binding_required_by_default(self) -> None:
+        with pytest.raises(ValidationError, match="token binding is required"):
             OidcProviderConfig(issuer=ISSUER)
 
     def test_allow_any_audience_opt_out(self) -> None:
@@ -39,6 +39,55 @@ class TestOidcProviderConfigValidation:
         with pytest.raises(ValidationError, match="mutually exclusive"):
             OidcProviderConfig(
                 issuer=ISSUER, audience="api", allow_any_audience=True
+            )
+
+    # ── client_id binding (e.g. Cognito access tokens with no aud) ──────────────
+
+    def test_client_id_is_a_valid_binding_without_audience(self) -> None:
+        cfg = OidcProviderConfig(
+            issuer=ISSUER, client_id="app-client-123", token_use="access"
+        )
+        assert cfg.audience is None
+        assert cfg.client_id == "app-client-123"
+        assert cfg.client_id_claim == "client_id"
+
+    def test_audience_and_client_id_can_coexist(self) -> None:
+        cfg = OidcProviderConfig(
+            issuer=ISSUER, audience="api", client_id="app-client-123"
+        )
+        assert cfg.audience == "api"
+        assert cfg.client_id == "app-client-123"
+
+    def test_client_id_list_is_accepted(self) -> None:
+        cfg = OidcProviderConfig(issuer=ISSUER, client_id=["a", "b"])
+        assert cfg.client_id == ["a", "b"]
+
+    def test_client_id_and_allow_any_audience_are_mutually_exclusive(self) -> None:
+        with pytest.raises(ValidationError, match="mutually exclusive"):
+            OidcProviderConfig(
+                issuer=ISSUER, client_id="app-client-123", allow_any_audience=True
+            )
+
+    def test_empty_client_id_string_rejected(self) -> None:
+        with pytest.raises(ValidationError):
+            OidcProviderConfig(issuer=ISSUER, client_id="")
+
+    def test_empty_client_id_list_rejected(self) -> None:
+        with pytest.raises(ValidationError):
+            OidcProviderConfig(issuer=ISSUER, client_id=[])
+
+    def test_client_id_list_with_empty_entry_rejected(self) -> None:
+        with pytest.raises(ValidationError):
+            OidcProviderConfig(issuer=ISSUER, client_id=["ok", "  "])
+
+    def test_empty_token_use_rejected(self) -> None:
+        with pytest.raises(ValidationError):
+            OidcProviderConfig(issuer=ISSUER, audience="api", token_use="")
+
+    def test_empty_client_id_claim_rejected(self) -> None:
+        with pytest.raises(ValidationError):
+            OidcProviderConfig(
+                issuer=ISSUER, client_id="x", client_id_claim="  "
             )
 
     def test_empty_audience_string_rejected(self) -> None:

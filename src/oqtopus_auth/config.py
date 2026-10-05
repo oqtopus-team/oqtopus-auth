@@ -66,10 +66,20 @@ class OidcProviderConfig(BaseModel):
 
     issuer: str  # expected iss; also used to discover the JWKS URL
     jwks_url: str | None = None  # explicit JWKS endpoint; skips discovery
-    audience: str | None = None  # expected aud; required unless opted out
-    # DANGEROUS opt-out: accept tokens regardless of aud. Only for issuers that
-    # do not scope tokens per resource; enables token substitution otherwise.
+    audience: str | None = None  # expected aud; a token binding (see below)
+    # DANGEROUS opt-out: accept tokens regardless of aud/client_id. Only for
+    # issuers that do not scope tokens per resource; enables token substitution.
     allow_any_audience: bool = False
+    # Bind the token to this app by the client-id claim instead of (or in
+    # addition to) `aud`. Needed for issuers whose *access tokens* carry no
+    # `aud` -- e.g. Cognito access tokens use `client_id` + `token_use=access`.
+    # Accepts one id or several.
+    client_id: str | list[str] | None = None
+    # Claim carrying the client id (Cognito: "client_id"; some IdPs: "azp").
+    client_id_claim: str = "client_id"
+    # When set, require the token's `token_use` claim to equal this value
+    # (Cognito access tokens use "access", id tokens "id"). None disables it.
+    token_use: str | None = None
     algorithms: list[str] = ["RS256"]
     required_scope: str | None = None  # None disables the scope gate
     # Claim used verbatim as AuthUser.account. For client-credentials (M2M)
@@ -77,7 +87,7 @@ class OidcProviderConfig(BaseModel):
     principal_claim: str = "sub"
     roles_claim: str | list[str] | None = None  # optional roles for RBAC
 
-    @field_validator("issuer", "principal_claim")
+    @field_validator("issuer", "principal_claim", "client_id_claim")
     @classmethod
     def _non_empty(cls, value: str) -> str:
         if not value.strip():
@@ -85,11 +95,28 @@ class OidcProviderConfig(BaseModel):
             raise ValueError(msg)
         return value
 
-    @field_validator("audience", "required_scope")
+    @field_validator("audience", "required_scope", "token_use")
     @classmethod
     def _non_empty_if_set(cls, value: str | None) -> str | None:
         if value is not None and not value.strip():
             msg = "must not be an empty string (use null to disable)"
+            raise ValueError(msg)
+        return value
+
+    @field_validator("client_id")
+    @classmethod
+    def _non_empty_client_id(
+        cls, value: str | list[str] | None
+    ) -> str | list[str] | None:
+        if value is None:
+            return value
+        if isinstance(value, str):
+            if not value.strip():
+                msg = "client_id must not be an empty string (use null to disable)"
+                raise ValueError(msg)
+            return value
+        if not value or any(not v.strip() for v in value):
+            msg = "client_id list must be non-empty with non-empty entries"
             raise ValueError(msg)
         return value
 
@@ -109,17 +136,36 @@ class OidcProviderConfig(BaseModel):
         return value
 
     @model_validator(mode="after")
-    def _require_audience(self) -> OidcProviderConfig:
-        if self.audience is None and not self.allow_any_audience:
+    def _require_token_binding(self) -> OidcProviderConfig:
+        # A token must be bound to *this* app, by one of two mechanisms:
+        #   - `audience`  -> verify the `aud` claim (OIDC id tokens, Keycloak
+        #                    access tokens with an audience mapper, ...)
+        #   - `client_id` -> verify the client-id claim (issuers whose access
+        #                    tokens have no `aud`, e.g. Cognito)
+        # allow_any_audience is the explicit, dangerous opt-out of *both* and so
+        # is mutually exclusive with each (otherwise any token from the issuer,
+        # for any client/resource, would be accepted).
+        if self.allow_any_audience:
+            if self.audience is not None:
+                msg = (
+                    "audience and allow_any_audience are mutually exclusive: set "
+                    "an audience to verify it, or allow_any_audience=true to skip it"
+                )
+                raise ValueError(msg)
+            if self.client_id is not None:
+                msg = (
+                    "client_id and allow_any_audience are mutually exclusive: "
+                    "client_id already binds the token to this app"
+                )
+                raise ValueError(msg)
+            return self
+        if self.audience is None and self.client_id is None:
             msg = (
-                "audience is required unless allow_any_audience=true "
-                "(skipping aud verification enables token substitution)"
-            )
-            raise ValueError(msg)
-        if self.audience is not None and self.allow_any_audience:
-            msg = (
-                "audience and allow_any_audience are mutually exclusive: set an "
-                "audience to verify it, or allow_any_audience=true to skip it"
+                "a token binding is required: set `audience` (verify the aud "
+                "claim), or `client_id` (verify the client-id claim, for issuers "
+                "whose access tokens carry no aud, e.g. Cognito), or "
+                "allow_any_audience=true to accept any token from the issuer "
+                "(dangerous: enables token substitution)"
             )
             raise ValueError(msg)
         return self

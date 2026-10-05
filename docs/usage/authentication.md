@@ -192,6 +192,72 @@ auth:
 | Unmapped value | Passed through as-is (the raw string). |
 | No match at all | The request is rejected with `403 Forbidden`. |
 
+## provider: oidc (verify-first)
+
+Unlike `provider: header` (which trusts a JWT injected by a reverse proxy), the
+`oidc` provider **verifies the incoming `Authorization: Bearer` token itself**
+against the issuer's JWKS (signature, `iss`, `exp`) and can enforce an OAuth2
+`scope`. Use it when the application is the resource server that validates tokens
+in-app (e.g. machine-to-machine clients, or an API behind API Gateway with no
+authorizer).
+
+### Binding the token to this app: `audience` vs `client_id`
+
+A token must be bound to *this* application so a token minted for another
+resource/client of the same issuer cannot be replayed. Configure **one** of:
+
+| Field | Verifies | Use when |
+|-------|----------|----------|
+| `audience` | the `aud` claim | the token carries an `aud` (OIDC **ID tokens**; Keycloak **access tokens** with an audience mapper; Cognito **access tokens with a resource binding**) |
+| `client_id` | a client-id claim (default claim name `client_id`) | the token has **no `aud`** and identifies the client another way — notably **Cognito access tokens without a resource binding**, which carry `client_id` |
+
+Rules:
+
+- At least one of `audience` / `client_id` is **required** (fail-closed). Setting
+  neither raises a config error.
+- They may be combined — if both are set, **both** are verified.
+- `allow_any_audience: true` is the explicit, dangerous opt-out of *both* and is
+  mutually exclusive with each (it accepts any token from the issuer).
+- `token_use` (optional) requires the token's `token_use` claim to equal the
+  given value — set it to `access` to reject ID tokens where an access token is
+  expected (Cognito).
+
+### Example: Amazon Cognito access token (without resource binding)
+
+A Cognito access token's `aud` is **conditional**: by default (no resource
+server / API bound to the app client) it has **no `aud`** and carries
+`client_id`, `token_use`, `sub` and `scope`. When you request a **resource
+binding** (a Cognito resource server with custom scopes), the resource server
+identifier is placed in `aud` instead.
+
+- **If `aud` is present** (resource binding configured) — prefer `audience:` to
+  verify it (it identifies the target resource/API). You may additionally set
+  `client_id` to also pin the OAuth client.
+- **If `aud` is absent** (the default below) — bind by `client_id`. Note that
+  `client_id` identifies the OAuth *client*, not the target API, so also setting
+  an **API-specific `required_scope`** is recommended so a token minted for a
+  different purpose by the same client is still rejected.
+
+```yaml
+auth:
+  provider: oidc
+  oidc:
+    issuer: "https://cognito-idp.{region}.amazonaws.com/{user-pool-id}"
+    client_id: "{app-client-id}"   # binds the token (no aud without resource binding)
+    client_id_claim: client_id     # default; Cognito uses "client_id"
+    token_use: access              # reject ID tokens
+    principal_claim: sub           # AuthUser.account ← stable per-user id (recommended)
+    required_scope: "myapi/write"  # recommended when there is no aud to bind the API
+```
+
+`principal_claim: sub` is the generally-safe choice — AWS recommends `sub` as the
+stable, immutable user identifier. Use a different claim (e.g. `username`) only
+when your application's existing user id is guaranteed to equal it.
+
+For an issuer whose access tokens *do* carry an `aud` (e.g. Keycloak with an
+audience mapper, or Cognito with a resource binding), use `audience:` to verify
+it — optionally alongside `client_id`.
+
 ## Permissions
 
 `oqtopus_auth.permissions` provides a small role → permission model that is

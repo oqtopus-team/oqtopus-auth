@@ -79,8 +79,10 @@ def _resolve_jwks_url(cfg: OidcProviderConfig) -> str:
 def verify_bearer_token(token: str, cfg: OidcProviderConfig) -> dict:
     """Verify an OIDC JWT and return its validated claims.
 
-    Verifies the signature (via JWKS), ``iss``, ``exp`` and -- when
-    ``cfg.audience`` is set -- ``aud``.
+    Verifies the signature (via JWKS), ``iss``, ``exp``, and the token's binding
+    to this app: ``aud`` when ``cfg.audience`` is set, and/or the client-id claim
+    when ``cfg.client_id`` is set (for issuers whose access tokens carry no
+    ``aud``, e.g. Cognito). When ``cfg.token_use`` is set it is enforced too.
 
     Returns:
         The decoded, validated claims.
@@ -108,7 +110,7 @@ def verify_bearer_token(token: str, cfg: OidcProviderConfig) -> dict:
     options["require"] = require
 
     try:
-        return jwt.decode(
+        claims = jwt.decode(
             token,
             signing_key.key,
             algorithms=cfg.algorithms,
@@ -118,6 +120,35 @@ def verify_bearer_token(token: str, cfg: OidcProviderConfig) -> dict:
     except Exception as exc:
         msg = f"Bearer token verification failed: {exc}"
         raise OidcError(msg) from exc
+
+    # Bind the token to this app by the client-id claim when `aud` is not used
+    # (e.g. Cognito access tokens have no `aud`; they carry `client_id`). PyJWT
+    # does not know this claim, so verify it ourselves.
+    if cfg.client_id is not None:
+        allowed = (
+            {cfg.client_id} if isinstance(cfg.client_id, str) else set(cfg.client_id)
+        )
+        actual = claims.get(cfg.client_id_claim)
+        # Guard the type before the set membership test: a non-string claim (an
+        # array/object in a crafted token) is unhashable and would raise
+        # TypeError -- which is not an OidcError, so it would surface as a 500
+        # instead of a 401. Reject any non-string value outright.
+        if not isinstance(actual, str) or actual not in allowed:
+            msg = (
+                f"token {cfg.client_id_claim!r} claim {actual!r} is not an "
+                f"allowed client id"
+            )
+            raise OidcError(msg)
+
+    # Reject the wrong kind of token (e.g. an id token where an access token is
+    # expected) when the issuer distinguishes them via `token_use` (Cognito).
+    if cfg.token_use is not None:
+        actual_use = claims.get("token_use")
+        if actual_use != cfg.token_use:
+            msg = f"unexpected token_use {actual_use!r} (expected {cfg.token_use!r})"
+            raise OidcError(msg)
+
+    return claims
 
 
 def extract_scopes(claims: Mapping[str, object]) -> set[str]:
