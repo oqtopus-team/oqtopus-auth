@@ -54,7 +54,7 @@ def _make_header_app() -> FastAPI:
 
 def _make_jwt(claims: dict) -> str:
     """Create an unsigned-verifiable HS256 JWT (signature verification disabled)."""
-    return pyjwt.encode(claims, "test-secret", algorithm="HS256")
+    return pyjwt.encode(claims, "test-secret-key-for-hs256-at-least-32-bytes", algorithm="HS256")
 
 
 @pytest.fixture

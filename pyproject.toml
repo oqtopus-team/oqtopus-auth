@@ -1,6 +1,6 @@
 [project]
 name = "oqtopus-auth"
-version = "0.2.0"
+version = "1.0.0"
 description = "Framework-agnostic authentication and authorization library for the OQTOPUS ecosystem, with optional FastAPI integration"
 readme = "README.md"
 license = "Apache-2.0"
@@ -42,7 +42,7 @@ dev = [
 ]
 test = [
   "fastapi>=0.136.1",
-  "httpx2>=2.9.1",
+  "httpx2>=2.13.1",
   "pytest>=9.0.3",
   "pytest-cov>=7.1.0",
   "pytest-mock>=3.15.1",
