@@ -18,7 +18,7 @@ import time
 import urllib.parse
 from typing import Literal
 
-import httpx
+import httpx2
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +27,7 @@ def _basic_auth_header(client_id: str, client_secret: str) -> str:
     """Build an RFC 6749 §2.3.1 ``client_secret_basic`` Authorization header.
 
     The spec requires each credential to be ``application/x-www-form-urlencoded``
-    before being joined with ``:`` and base64-encoded -- a step httpx's
+    before being joined with ``:`` and base64-encoded -- a step httpx2's
     ``auth=(id, secret)`` does not perform, so we build the header ourselves.
 
     Returns:
@@ -206,13 +206,13 @@ class ClientCredentialsTokenProvider:
         # over-estimate the remaining lifetime.
         requested_at = time.monotonic()
         try:
-            response = httpx.post(
+            response = httpx2.post(
                 self._token_url,
                 data=data,
                 headers=headers,
                 timeout=self._timeout_seconds,
             )
-        except httpx.HTTPError as exc:
+        except httpx2.HTTPError as exc:
             msg = f"Failed to reach token endpoint {self._token_url}: {exc}"
             raise ClientCredentialsError(msg) from exc
 

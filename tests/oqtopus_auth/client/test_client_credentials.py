@@ -1,10 +1,10 @@
-"""Unit tests for oqtopus_auth/client/client_credentials.py (mocked httpx)."""
+"""Unit tests for oqtopus_auth/client/client_credentials.py (mocked httpx2)."""
 
 from __future__ import annotations
 
 import base64
 
-import httpx
+import httpx2
 import pytest
 from pytest_mock import MockerFixture
 
@@ -40,14 +40,14 @@ def _ok(mocker: MockerFixture, access_token: str = "tok-1", expires_in: int = 90
 
 class TestClientCredentialsTokenProvider:
     def test_token_is_cached_and_reused(self, mocker: MockerFixture) -> None:
-        post = mocker.patch("httpx.post", return_value=_ok(mocker))
+        post = mocker.patch("httpx2.post", return_value=_ok(mocker))
         provider = _make_provider()
         assert provider.get_token() == "tok-1"
         assert provider.get_token() == "tok-1"
         post.assert_called_once()
 
     def test_basic_auth_is_default(self, mocker: MockerFixture) -> None:
-        post = mocker.patch("httpx.post", return_value=_ok(mocker))
+        post = mocker.patch("httpx2.post", return_value=_ok(mocker))
         _make_provider().get_token()
         _, kwargs = post.call_args
         assert kwargs["data"]["grant_type"] == "client_credentials"
@@ -64,7 +64,7 @@ class TestClientCredentialsTokenProvider:
     def test_post_auth_style_sends_credentials_in_body(
         self, mocker: MockerFixture
     ) -> None:
-        post = mocker.patch("httpx.post", return_value=_ok(mocker))
+        post = mocker.patch("httpx2.post", return_value=_ok(mocker))
         _make_provider(auth_style="post").get_token()
         _, kwargs = post.call_args
         assert kwargs["data"]["client_id"] == "oqtopus-engine"
@@ -74,7 +74,7 @@ class TestClientCredentialsTokenProvider:
     def test_basic_auth_url_encodes_special_characters(
         self, mocker: MockerFixture
     ) -> None:
-        post = mocker.patch("httpx.post", return_value=_ok(mocker))
+        post = mocker.patch("httpx2.post", return_value=_ok(mocker))
         _make_provider(
             client_id="id:with/special", client_secret="p@ss:w rd"
         ).get_token()
@@ -88,7 +88,7 @@ class TestClientCredentialsTokenProvider:
     def test_short_lived_token_is_still_cached(self, mocker: MockerFixture) -> None:
         # expires_in (30) <= default skew (60): the clamp must still cache it,
         # otherwise it would be treated as already-expired and refetched each call.
-        post = mocker.patch("httpx.post", return_value=_ok(mocker, expires_in=30))
+        post = mocker.patch("httpx2.post", return_value=_ok(mocker, expires_in=30))
         mocker.patch(
             "oqtopus_auth.client.client_credentials.time.monotonic",
             side_effect=[0.0, 5.0],  # requested_at=0 -> expiry 0+30-15=15; check at 5
@@ -112,7 +112,7 @@ class TestClientCredentialsTokenProvider:
 
     def test_refresh_after_expiry(self, mocker: MockerFixture) -> None:
         post = mocker.patch(
-            "httpx.post",
+            "httpx2.post",
             side_effect=[_ok(mocker, "tok-1"), _ok(mocker, "tok-2")],
         )
         # monotonic is read 3x: refresh#1 stamps expiry at 0+900; the expiry
@@ -128,7 +128,7 @@ class TestClientCredentialsTokenProvider:
 
     def test_force_refresh(self, mocker: MockerFixture) -> None:
         post = mocker.patch(
-            "httpx.post",
+            "httpx2.post",
             side_effect=[_ok(mocker, "tok-1"), _ok(mocker, "tok-2")],
         )
         provider = _make_provider()
@@ -140,12 +140,12 @@ class TestClientCredentialsTokenProvider:
         resp = mocker.Mock()
         resp.status_code = 401
         resp.text = "invalid_client"
-        mocker.patch("httpx.post", return_value=resp)
+        mocker.patch("httpx2.post", return_value=resp)
         with pytest.raises(ClientCredentialsError):
             _make_provider().get_token()
 
     def test_network_error_raises(self, mocker: MockerFixture) -> None:
-        mocker.patch("httpx.post", side_effect=httpx.ConnectError("boom"))
+        mocker.patch("httpx2.post", side_effect=httpx2.ConnectError("boom"))
         with pytest.raises(ClientCredentialsError):
             _make_provider().get_token()
 
@@ -153,7 +153,7 @@ class TestClientCredentialsTokenProvider:
         resp = mocker.Mock()
         resp.status_code = 200
         resp.json.return_value = {"expires_in": 900}
-        mocker.patch("httpx.post", return_value=resp)
+        mocker.patch("httpx2.post", return_value=resp)
         with pytest.raises(ClientCredentialsError):
             _make_provider().get_token()
 
@@ -165,7 +165,7 @@ class TestClientCredentialsTokenProvider:
             "access_token": None,
             "expires_in": 900,
         }
-        mocker.patch("httpx.post", return_value=resp)
+        mocker.patch("httpx2.post", return_value=resp)
         with pytest.raises(ClientCredentialsError, match="access_token"):
             _make_provider().get_token()
 
@@ -177,7 +177,7 @@ class TestClientCredentialsTokenProvider:
             "access_token": "   ",
             "expires_in": 900,
         }
-        mocker.patch("httpx.post", return_value=resp)
+        mocker.patch("httpx2.post", return_value=resp)
         with pytest.raises(ClientCredentialsError, match="access_token"):
             _make_provider().get_token()
 
@@ -189,7 +189,7 @@ class TestClientCredentialsTokenProvider:
             "access_token": "tok",
             "expires_in": 0,
         }
-        mocker.patch("httpx.post", return_value=resp)
+        mocker.patch("httpx2.post", return_value=resp)
         with pytest.raises(ClientCredentialsError, match="expires_in"):
             _make_provider().get_token()
 
@@ -201,7 +201,7 @@ class TestClientCredentialsTokenProvider:
             "access_token": "tok",
             "expires_in": 0.5,
         }
-        mocker.patch("httpx.post", return_value=resp)
+        mocker.patch("httpx2.post", return_value=resp)
         with pytest.raises(ClientCredentialsError, match="expires_in"):
             _make_provider().get_token()
 
@@ -209,7 +209,7 @@ class TestClientCredentialsTokenProvider:
         resp = mocker.Mock()
         resp.status_code = 200
         resp.json.return_value = {"access_token": "tok", "expires_in": 900}
-        mocker.patch("httpx.post", return_value=resp)
+        mocker.patch("httpx2.post", return_value=resp)
         with pytest.raises(ClientCredentialsError, match="token_type"):
             _make_provider().get_token()
 
@@ -221,7 +221,7 @@ class TestClientCredentialsTokenProvider:
             "expires_in": 900,
             "token_type": "mac",
         }
-        mocker.patch("httpx.post", return_value=resp)
+        mocker.patch("httpx2.post", return_value=resp)
         with pytest.raises(ClientCredentialsError, match="token_type"):
             _make_provider().get_token()
 
@@ -229,6 +229,6 @@ class TestClientCredentialsTokenProvider:
         resp = mocker.Mock()
         resp.status_code = 200
         resp.json.side_effect = ValueError("no json")
-        mocker.patch("httpx.post", return_value=resp)
+        mocker.patch("httpx2.post", return_value=resp)
         with pytest.raises(ClientCredentialsError, match="not valid JSON"):
             _make_provider().get_token()
